@@ -421,27 +421,22 @@ namespace Leantime\Domain\Tickets\Repositories {
                     t2.profileId AS editorProfileId,
                     milestone.headline AS milestoneHeadline,
                     IF((milestone.tags IS NULL OR milestone.tags = ''), 'var(--grey)', milestone.tags) AS milestoneColor,
-                    COUNT(DISTINCT zp_comment.id) AS commentCount,
-                    COUNT(DISTINCT zp_file.id) AS fileCount,
-                    COUNT(DISTINCT subtasks.id) AS subtaskCount,
+                    (SELECT COUNT(*) FROM zp_comment WHERE zp_tickets.id = zp_comment.moduleId and zp_comment.module = 'ticket') AS commentCount,
+                    (SELECT COUNT(*) FROM zp_file WHERE zp_tickets.id = zp_file.moduleId and zp_file.module = 'ticket') AS fileCount,
+                    (SELECT COUNT(*) FROM zp_tickets AS subtasks WHERE zp_tickets.id = subtasks.dependingTicketId AND subtasks.dependingTicketId > 0) AS subtaskCount,
                     parent.headline AS parentHeadline
                 FROM
                     zp_tickets
-                LEFT JOIN zp_relationuserproject USING (projectId)
                 LEFT JOIN zp_projects ON zp_tickets.projectId = zp_projects.id
                 LEFT JOIN zp_clients ON zp_projects.clientId = zp_clients.id
                 LEFT JOIN zp_user AS t1 ON zp_tickets.userId = t1.id
                 LEFT JOIN zp_user AS t2 ON zp_tickets.editorId = t2.id
                 LEFT JOIN zp_user AS requestor ON requestor.id = :requestorId
-                LEFT JOIN zp_comment ON zp_tickets.id = zp_comment.moduleId and zp_comment.module = 'ticket'
-                LEFT JOIN zp_file ON zp_tickets.id = zp_file.moduleId and zp_file.module = 'ticket'
                 LEFT JOIN zp_sprints ON zp_tickets.sprint = zp_sprints.id
                 LEFT JOIN zp_tickets AS milestone ON zp_tickets.milestoneid = milestone.id AND zp_tickets.milestoneid > 0 AND milestone.type = 'milestone'
                 LEFT JOIN zp_tickets AS parent ON zp_tickets.dependingTicketId = parent.id
-                LEFT JOIN zp_tickets AS subtasks ON zp_tickets.id = subtasks.dependingTicketId AND subtasks.dependingTicketId > 0
-                LEFT JOIN zp_timesheets AS timesheets ON zp_tickets.id = timesheets.ticketId
                 WHERE (
-                    zp_relationuserproject.userId = :userId
+                    zp_tickets.projectId IN (SELECT projectId FROM zp_relationuserproject WHERE zp_relationuserproject.userId = :userId)
                     OR zp_projects.psettings = 'all'
                     OR (zp_projects.psettings = 'client' AND zp_projects.clientId = :clientId)
                     OR (requestor.role >= 40)
@@ -516,8 +511,6 @@ namespace Leantime\Domain\Tickets\Repositories {
             if (isset($searchCriteria["sprint"]) && $searchCriteria["sprint"]  == "backlog") {
                 $query .= " AND (zp_tickets.sprint IS NULL OR zp_tickets.sprint = '' OR zp_tickets.sprint = -1)";
             }
-
-            $query .= " GROUP BY zp_tickets.id ";
 
             if ($sort == "standard") {
                 $query .= " ORDER BY zp_tickets.sortindex ASC, zp_tickets.id DESC";
